@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dynamic Rollover Budget</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .app-container { max-width: 480px; margin: 0 auto; background: white; min-height: 100vh; position: relative; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
+        .hide { display: none !important; }
+        .tab-content { padding-bottom: 80px; }
+        
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-indigo-100 selection:text-indigo-900">
+
+    <div class="app-container flex flex-col h-screen overflow-hidden">
+        
+        <!-- Top Navigation / Header -->
+        <header class="bg-indigo-600 text-white p-4 shadow-md z-10 flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-tight"><i class="fa-solid fa-wallet mr-2"></i>RollBudget</h1>
+            <div id="header-actions" class="hide">
+                <button id="btn-settings" class="text-indigo-100 hover:text-white transition p-2 rounded-full hover:bg-indigo-500/50">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-y-auto relative">
+            
+            <!-- Loading Screen -->
+            <div id="view-loading" class="flex flex-col items-center justify-center h-full">
+                <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-500 mb-4"></i>
+                <p class="text-slate-500 animate-pulse">Syncing data...</p>
+            </div>
+
+            <!-- Setup Screen -->
+            <div id="view-setup" class="hide p-6 h-full flex flex-col justify-center">
+                <div class="text-center mb-8">
+                    <div class="bg-indigo-100 text-indigo-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                        <i class="fa-solid fa-flag-checkered"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold mb-2">Let's Get Started</h2>
+                    <p class="text-slate-500 text-sm">Set your daily budget limit and when you want to start tracking.</p>
+                </div>
+                
+                <form id="form-setup" class="space-y-5">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Daily Budget Limit (₫/$/€)</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-coins text-slate-400"></i>
+                            </div>
+                            <input type="number" id="setup-budget" required min="1" step="0.01" class="pl-10 w-full rounded-xl border-slate-300 border p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="e.g. 500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Start Date</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-regular fa-calendar text-slate-400"></i>
+                            </div>
+                            <input type="date" id="setup-date" required class="pl-10 w-full rounded-xl border-slate-300 border p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition mt-4">
+                        Save & Continue <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Dashboard / Home Tab -->
+            <div id="tab-home" class="hide tab-content p-4 space-y-6">
+                
+                <!-- Main Budget Card -->
+                <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-10"></div>
+                    
+                    <p class="text-indigo-100 text-sm font-medium mb-1 uppercase tracking-wider">Available Budget</p>
+                    <div class="flex items-baseline mb-4">
+                        <span id="ui-available" class="text-4xl font-bold tracking-tight">0</span>
+                    </div>
+                    
+                    <div class="bg-white/20 rounded-xl p-3 flex justify-between items-center backdrop-blur-sm">
+                        <div>
+                            <p class="text-xs text-indigo-100 uppercase">Total Accumulated</p>
+                            <p id="ui-allocated" class="font-semibold text-lg">0</p>
+                        </div>
+                        <div class="h-8 w-px bg-white/30"></div>
+                        <div class="text-right">
+                            <p class="text-xs text-indigo-100 uppercase">Total Spent</p>
+                            <p id="ui-total-spent" class="font-semibold text-lg">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Expenses -->
+                <div>
+                    <div class="flex justify-between items-end mb-3">
+                        <h3 class="font-bold text-slate-800 text-lg">Recent Expenses</h3>
+                        <button id="btn-view-all" class="text-sm text-indigo-600 font-medium hover:underline">View All</button>
+                    </div>
+                    <div id="list-recent-expenses" class="space-y-3">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Expense Tab -->
+            <div id="tab-add" class="hide tab-content p-5">
+                <h2 class="text-2xl font-bold mb-6 text-slate-800">Add Expense</h2>
+                <form id="form-expense" class="space-y-5 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Amount</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <span class="text-slate-500 font-medium">-</span>
+                            </div>
+                            <input type="number" id="exp-amount" required min="0.01" step="0.01" class="pl-8 w-full text-lg rounded-xl border-slate-200 border p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition bg-slate-50" placeholder="0.00">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-tag text-slate-400"></i>
+                            </div>
+                            <input type="text" id="exp-category" list="category-suggestions" required autocomplete="off" class="pl-10 w-full rounded-xl border-slate-200 border p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition bg-slate-50" placeholder="e.g. Food, Transport">
+                            <datalist id="category-suggestions">
+                                <!-- Populated dynamically -->
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                        <input type="date" id="exp-date" required class="w-full rounded-xl border-slate-200 border p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition bg-slate-50">
+                    </div>
+
+                    <button type="submit" class="w-full bg-slate-900 text-white font-semibold py-3.5 rounded-xl shadow-md hover:bg-slate-800 transition mt-6 flex items-center justify-center">
+                        <i class="fa-solid fa-check mr-2"></i> Save Expense
+                    </button>
+                </form>
+            </div>
+
+            <!-- Stats Tab -->
+            <div id="tab-stats" class="hide tab-content p-4 space-y-6">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-2xl font-bold text-slate-800">Monthly Stats</h2>
+                    <select id="stats-month" class="bg-slate-100 border-none text-sm font-medium rounded-lg p-2 outline-none cursor-pointer text-slate-700">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6">
+                    <p class="text-slate-500 text-sm mb-1">Total spent this month</p>
+                    <p id="stats-total" class="text-3xl font-bold text-slate-800">0</p>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-slate-700 mb-4">Spending by Category</h3>
+                    <div id="stats-categories" class="space-y-4">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Expenses Modal (Overlay) -->
+            <div id="modal-all-expenses" class="hide fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4">
+                <div class="bg-white w-full max-w-md h-[85vh] sm:h-[80vh] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
+                    <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-3xl">
+                        <h2 class="font-bold text-lg">Transaction History</h2>
+                        <button id="btn-close-modal" class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div id="list-all-expenses" class="p-4 overflow-y-auto flex-1 space-y-2 bg-slate-50">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav id="bottom-nav" class="hide bg-white border-t border-slate-200 flex justify-around p-2 pb-safe absolute bottom-0 w-full z-10">
+            <button class="nav-btn active flex flex-col items-center p-2 text-indigo-600 transition min-w-[64px]" data-target="tab-home">
+                <i class="fa-solid fa-house text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Home</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center p-2 text-slate-400 hover:text-slate-600 transition min-w-[64px]" data-target="tab-add">
+                <div class="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 -mt-6 border-4 border-white mb-0.5">
+                    <i class="fa-solid fa-plus text-xl"></i>
+                </div>
+                <span class="text-[10px] font-medium">Add</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center p-2 text-slate-400 hover:text-slate-600 transition min-w-[64px]" data-target="tab-stats">
+                <i class="fa-solid fa-chart-pie text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Stats</span>
+            </button>
+        </nav>
+        
+        <!-- Custom Alert Modal -->
+        <div id="custom-alert" class="hide fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl scale-95 transition-transform duration-200">
+                <div class="text-center">
+                    <div id="alert-icon" class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                        <i class="fa-solid fa-triangle-exclamation text-red-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-900 mb-2" id="alert-title">Notice</h3>
+                    <p class="text-sm text-slate-500 mb-6" id="alert-message">Message here</p>
+                    <button id="alert-close" class="w-full inline-flex justify-center rounded-xl border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none sm:text-sm">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+        .nav-btn.active { color: #4f46e5; }
+        .nav-btn:not(.active) i:not(.fa-plus) { color: #94a3b8; }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        .alert-show { transform: scale(1) !important; }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment Variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'budget-app-default';
+        const firebaseConfig = {
+            apiKey: "AIzaSyDpG2OlLT3uc7Gm3HP4mlIq9PBp4vzAlxE",
+            authDomain: "ai-personal-2026.firebaseapp.com",
+            projectId: "ai-personal-2026",
+            storageBucket: "ai-personal-2026.firebasestorage.app",
+            messagingSenderId: "353971817048",
+            appId: "1:353971817048:web:1f20de80f4011bbd99982d"
+        };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // App State
+        let appData = {
+            settings: null,
+            expenses: [],
+            uniqueCategories: new Set(),
+            expensesLoaded: false
+        };
+        let currentUser = null;
+        let db, auth;
+        let unsubscribeSettings = null;
+        let unsubscribeExpenses = null;
+        let useLocalFallback = false;
+
+        // UI Elements
+        const views = {
+            loading: document.getElementById('view-loading'),
+            setup: document.getElementById('view-setup'),
+            home: document.getElementById('tab-home'),
+            add: document.getElementById('tab-add'),
+            stats: document.getElementById('tab-stats')
+        };
+        const bottomNav = document.getElementById('bottom-nav');
+        const headerActions = document.getElementById('header-actions');
+        const navButtons = document.querySelectorAll('.nav-btn');
+
+        // Formatter for currency (simple)
+        const formatMoney = (amount) => {
+            return Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        };
+
+        // Date Helpers
+        const getTodayLocal = () => {
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
+        };
+        
+        const getDaysSince = (startDateStr) => {
+            const start = new Date(startDateStr + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const diffTime = today.getTime() - start.getTime();
+            const days = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            return Math.max(0, days); // Prevent negative if start date is in the future
+        };
+
+        // Initialization
+        async function initApp() {
+            try {
+                if(Object.keys(firebaseConfig).length === 0) {
+                    showAlert("Error", "Firebase configuration is missing.");
+                    return;
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Setup default date in Add form
+                document.getElementById('exp-date').value = getTodayLocal();
+                document.getElementById('setup-date').value = getTodayLocal();
+
+                // Authentication
+                try {
+                    if (initialAuthToken) {
+                        try {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } catch (e) {
+                            console.error("Custom token failed, trying anonymous", e);
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            currentUser = user;
+                            loadUserData();
+                        }
+                    });
+                } catch (authError) {
+                    console.warn("Firebase Auth Error. Falling back to local storage.", authError);
+                    useLocalFallback = true;
+                    currentUser = { uid: 'local-demo-user' };
+                    loadUserData();
+                }
+
+                attachEventListeners();
+            } catch (error) {
+                console.error("Initialization error:", error);
+                showAlert("Initialization Error", error.message);
+            }
+        }
+
+        // Data Loading
+        function loadUserData() {
+            if (!currentUser) return;
+            
+            if (useLocalFallback) {
+                // Load from localStorage
+                const storedSettings = localStorage.getItem('budget_settings');
+                if (storedSettings) {
+                    appData.settings = JSON.parse(storedSettings);
+                } else {
+                    showView('setup');
+                    bottomNav.classList.add('hide');
+                    headerActions.classList.add('hide');
+                }
+                
+                const storedExpenses = localStorage.getItem('budget_expenses');
+                if (storedExpenses) {
+                    appData.expenses = JSON.parse(storedExpenses);
+                    appData.expenses.forEach(e => appData.uniqueCategories.add(e.category));
+                }
+                appData.expensesLoaded = true;
+                
+                if (appData.settings) {
+                    updateAllUI();
+                }
+                return;
+            }
+
+            const uid = currentUser.uid;
+
+            // 1. Listen to Settings
+            const settingsRef = doc(db, 'artifacts', appId, 'users', uid, 'settings');
+            unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    appData.settings = docSnap.data();
+                    if(appData.expensesLoaded) {
+                        updateAllUI();
+                    }
+                } else {
+                    // No settings, show setup
+                    showView('setup');
+                    bottomNav.classList.add('hide');
+                    headerActions.classList.add('hide');
+                }
+            }, (error) => {
+                console.error("Settings load error:", error);
+            });
+
+            // 2. Listen to Expenses
+            const expensesRef = collection(db, 'artifacts', appId, 'users', uid, 'expenses');
+            unsubscribeExpenses = onSnapshot(expensesRef, (snapshot) => {
+                appData.expenses = [];
+                appData.uniqueCategories.clear();
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    data.id = doc.id;
+                    appData.expenses.push(data);
+                    if(data.category) appData.uniqueCategories.add(data.category);
+                });
+                
+                // Sort by date descending
+                appData.expenses.sort((a, b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
+                appData.expensesLoaded = true;
+                
+                if (appData.settings) {
+                    updateAllUI();
+                }
+            }, (error) => {
+                console.error("Expenses load error:", error);
+            });
+        }
+
+        // UI Updates
+        function updateAllUI() {
+            if(!appData.settings) return;
+            
+            // If we are still in loading or setup, move to home
+            if(!views.home.classList.contains('hide') === false && !views.add.classList.contains('hide') === false && !views.stats.classList.contains('hide') === false) {
+                showView('home');
+                bottomNav.classList.remove('hide');
+                headerActions.classList.remove('hide');
+            }
+
+            calculateBudget();
+            renderRecentExpenses();
+            updateCategorySuggestions();
+            populateStatsMonths();
+            renderStats();
+        }
+
+        function calculateBudget() {
+            const { baseBudget, startDate } = appData.settings;
+            const daysElapsed = getDaysSince(startDate);
+            const totalAllocated = daysElapsed * Number(baseBudget);
+            
+            const totalSpent = appData.expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+            const available = totalAllocated - totalSpent;
+
+            document.getElementById('ui-allocated').innerText = formatMoney(totalAllocated);
+            document.getElementById('ui-total-spent').innerText = formatMoney(totalSpent);
+            
+            const availEl = document.getElementById('ui-available');
+            availEl.innerText = formatMoney(available);
+            
+            if (available < 0) {
+                availEl.classList.remove('text-white');
+                availEl.classList.add('text-red-300');
+            } else {
+                availEl.classList.add('text-white');
+                availEl.classList.remove('text-red-300');
+            }
+        }
+
+        function renderRecentExpenses() {
+            const listEl = document.getElementById('list-recent-expenses');
+            const modalListEl = document.getElementById('list-all-expenses');
+            listEl.innerHTML = '';
+            modalListEl.innerHTML = '';
+
+            if (appData.expenses.length === 0) {
+                const emptyHTML = `<div class="text-center p-6 text-slate-400 border border-dashed border-slate-300 rounded-2xl"><i class="fa-solid fa-receipt text-2xl mb-2"></i><p class="text-sm">No expenses yet</p></div>`;
+                listEl.innerHTML = emptyHTML;
+                modalListEl.innerHTML = emptyHTML;
+                return;
+            }
+
+            // Render top 5 for home
+            const recent = appData.expenses.slice(0, 5);
+            recent.forEach(exp => listEl.appendChild(createExpenseElement(exp)));
+
+            // Render all for modal
+            let currentDateStr = '';
+            appData.expenses.forEach(exp => {
+                if (exp.date !== currentDateStr) {
+                    const dateHeader = document.createElement('div');
+                    dateHeader.className = 'text-xs font-bold text-slate-500 mt-4 mb-2 pl-2 uppercase tracking-wide';
+                    
+                    const dateObj = new Date(exp.date + 'T00:00:00');
+                    const formattedDate = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                    
+                    dateHeader.innerText = exp.date === getTodayLocal() ? 'Today' : formattedDate;
+                    modalListEl.appendChild(dateHeader);
+                    currentDateStr = exp.date;
+                }
+                modalListEl.appendChild(createExpenseElement(exp, true));
+            });
+        }
+
+        function createExpenseElement(exp, isModal = false) {
+            const el = document.createElement('div');
+            el.className = 'bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center';
+            
+            const firstChar = exp.category ? exp.category.charAt(0).toUpperCase() : '?';
+            
+            el.innerHTML = `
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold shrink-0">
+                        ${firstChar}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-semibold text-slate-800 truncate">${exp.category}</p>
+                        <p class="text-xs text-slate-400">${exp.date}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 ml-2 shrink-0">
+                    <p class="font-bold text-slate-800">-${formatMoney(exp.amount)}</p>
+                    ${isModal ? `<button class="text-red-400 hover:text-red-600 p-2" onclick="deleteExpense('${exp.id}')"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                </div>
+            `;
+            return el;
+        }
+
+        // Must be global for inline onclick
+        window.deleteExpense = async function(id) {
+            if (!currentUser) return;
+            try {
+                if (useLocalFallback) {
+                    appData.expenses = appData.expenses.filter(e => e.id !== id);
+                    localStorage.setItem('budget_expenses', JSON.stringify(appData.expenses));
+                    updateAllUI();
+                    return;
+                }
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', id));
+                // Toast or feedback not strictly needed as UI will optimistically/reactively update
+            } catch (error) {
+                showAlert("Error", "Could not delete expense.");
+            }
+        };
+
+        function updateCategorySuggestions() {
+            const datalist = document.getElementById('category-suggestions');
+            datalist.innerHTML = '';
+            appData.uniqueCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                datalist.appendChild(option);
+            });
+        }
+
+        function populateStatsMonths() {
+            const select = document.getElementById('stats-month');
+            const currentVal = select.value;
+            select.innerHTML = '';
+            
+            const months = new Set();
+            appData.expenses.forEach(exp => {
+                months.add(exp.date.substring(0, 7)); // YYYY-MM
+            });
+            
+            // Always include current month even if no expenses
+            const currentMonth = getTodayLocal().substring(0, 7);
+            months.add(currentMonth);
+
+            const sortedMonths = Array.from(months).sort().reverse();
+            
+            sortedMonths.forEach(m => {
+                const [year, month] = m.split('-');
+                const date = new Date(year, parseInt(month)-1, 1);
+                const name = date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+                
+                const option = document.createElement('option');
+                option.value = m;
+                option.text = name;
+                select.appendChild(option);
+            });
+            
+            if (currentVal && sortedMonths.includes(currentVal)) {
+                select.value = currentVal;
+            } else {
+                select.value = sortedMonths[0];
+            }
+        }
+
+        function renderStats() {
+            const monthPrefix = document.getElementById('stats-month').value;
+            if(!monthPrefix) return;
+
+            const filtered = appData.expenses.filter(e => e.date.startsWith(monthPrefix));
+            const total = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
+            
+            document.getElementById('stats-total').innerText = formatMoney(total);
+
+            const byCategory = {};
+            filtered.forEach(e => {
+                byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount);
+            });
+
+            // Sort by amount descending
+            const sortedCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+
+            const container = document.getElementById('stats-categories');
+            container.innerHTML = '';
+
+            if (sortedCategories.length === 0) {
+                container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">No data for this month.</p>`;
+                return;
+            }
+
+            // Colors array for visual variety
+            const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500', 'bg-cyan-500'];
+
+            sortedCategories.forEach(([cat, amount], index) => {
+                const percentage = total > 0 ? (amount / total) * 100 : 0;
+                const colorClass = colors[index % colors.length];
+                
+                const el = document.createElement('div');
+                el.innerHTML = `
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-medium text-slate-700">${cat}</span>
+                        <span class="font-bold text-slate-800">${formatMoney(amount)} <span class="text-slate-400 font-normal text-xs ml-1">(${percentage.toFixed(0)}%)</span></span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2.5 mb-4 overflow-hidden">
+                        <div class="${colorClass} h-2.5 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+
+        // Interactions & Navigation
+        function showView(viewId) {
+            Object.values(views).forEach(v => v.classList.add('hide'));
+            if(views[viewId]) views[viewId].classList.remove('hide');
+        }
+
+        function switchTab(targetId) {
+            // Remove active from all tabs & nav
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hide'));
+            navButtons.forEach(btn => btn.classList.remove('active'));
+
+            // Show target
+            document.getElementById(targetId).classList.remove('hide');
+            document.querySelector(`[data-target="${targetId}"]`).classList.add('active');
+            
+            // Special actions on tab switch
+            if(targetId === 'tab-stats') {
+                renderStats();
+            }
+        }
+
+        function attachEventListeners() {
+            // Setup Form
+            document.getElementById('form-setup').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!currentUser) return;
+                const budget = document.getElementById('setup-budget').value;
+                const date = document.getElementById('setup-date').value;
+
+                try {
+                    const newSettings = {
+                        baseBudget: Number(budget),
+                        startDate: date,
+                        updatedAt: Date.now()
+                    };
+
+                    if (useLocalFallback) {
+                        localStorage.setItem('budget_settings', JSON.stringify(newSettings));
+                        appData.settings = newSettings;
+                        updateAllUI();
+                    } else {
+                        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'settings'), newSettings);
+                    }
+                    // Will auto-redirect via onSnapshot or updateAllUI
+                } catch (error) {
+                    showAlert("Error", "Could not save settings.");
+                }
+            });
+
+            // Settings button (re-open setup)
+            document.getElementById('btn-settings').addEventListener('click', () => {
+                if(appData.settings) {
+                    document.getElementById('setup-budget').value = appData.settings.baseBudget;
+                    document.getElementById('setup-date').value = appData.settings.startDate;
+                }
+                showView('setup');
+                bottomNav.classList.add('hide');
+                headerActions.classList.add('hide');
+            });
+
+            // Add Expense Form
+            document.getElementById('form-expense').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!currentUser) return;
+
+                const amount = document.getElementById('exp-amount').value;
+                const category = document.getElementById('exp-category').value.trim();
+                const date = document.getElementById('exp-date').value;
+
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+
+                try {
+                    const newExpense = {
+                        amount: Number(amount),
+                        category: category || 'Uncategorized',
+                        date: date,
+                        timestamp: Date.now()
+                    };
+
+                    if (useLocalFallback) {
+                        newExpense.id = Date.now().toString();
+                        appData.expenses.push(newExpense);
+                        appData.uniqueCategories.add(newExpense.category);
+                        appData.expenses.sort((a, b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
+                        localStorage.setItem('budget_expenses', JSON.stringify(appData.expenses));
+                        updateAllUI();
+                    } else {
+                        await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses'), newExpense);
+                    }
+                    
+                    // Reset form and go to home
+                    e.target.reset();
+                    document.getElementById('exp-date').value = getTodayLocal();
+                    switchTab('tab-home');
+                } catch (error) {
+                    showAlert("Error", "Could not add expense.");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> Save Expense';
+                }
+            });
+
+            // Navigation
+            navButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    switchTab(btn.dataset.target);
+                });
+            });
+
+            // Modal Controls
+            document.getElementById('btn-view-all').addEventListener('click', () => {
+                document.getElementById('modal-all-expenses').classList.remove('hide');
+            });
+            document.getElementById('btn-close-modal').addEventListener('click', () => {
+                document.getElementById('modal-all-expenses').classList.add('hide');
+            });
+            
+            // Stats month selector
+            document.getElementById('stats-month').addEventListener('change', renderStats);
+
+            // Custom Alert Close
+            document.getElementById('alert-close').addEventListener('click', hideAlert);
+        }
+
+        // Custom Alert System
+        function showAlert(title, message) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-message').innerText = message;
+            const alertModal = document.getElementById('custom-alert');
+            alertModal.classList.remove('hide');
+            setTimeout(() => {
+                alertModal.querySelector('div').classList.add('alert-show');
+            }, 10);
+        }
+        function hideAlert() {
+            const alertModal = document.getElementById('custom-alert');
+            alertModal.querySelector('div').classList.remove('alert-show');
+            setTimeout(() => {
+                alertModal.classList.add('hide');
+            }, 200);
+        }
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initApp);
+
+    </script>
+</body>
+</html>
